@@ -1,0 +1,12 @@
+[package]
+name = "hlml"
+version = "0.1.0"
+edition = "2021"
+description = "This packages including rust-safe function of hlml-sys crate"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+hlml_sys = { path = "../hlml-sys/" }
+thiserror = "2.0.12"
+log = "0.4.27"

@@ -1,0 +1,16 @@
+[package]
+name = "hlml_sys"
+version = "0.1.0"
+edition = "2021"
+description = "This package includes the bindings to hlml C code."
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+
+[build-dependencies]
+bindgen = "0.72.0"
+
+[lib]
+name = "hlml_sys"
+path = "lib.rs"
