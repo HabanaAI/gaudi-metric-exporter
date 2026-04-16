@@ -9,4 +9,4 @@ description = "This packages including rust-safe function of hlml-sys crate"
 [dependencies]
 hlml_sys = { path = "../hlml-sys/" }
 thiserror = "2.0.12"
-log = "0.4.27"
+log = "0.4.29"

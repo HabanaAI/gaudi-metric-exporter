@@ -16,7 +16,12 @@
 
 # Base image for dependencies
 ARG BASE_INSTALLER_IMAGE
-FROM ${BASE_INSTALLER_IMAGE} AS base_image
+FROM ${BASE_INSTALLER_IMAGE} AS base
+FROM rust:1.92.0-bookworm AS rust
+FROM golang:1.25.8 AS golang
+FROM ubuntu:24.04 AS ubuntu
+
+FROM base AS base_image
 RUN rm /usr/lib/habanalabs/libtpc_kernels.so && \
     rm /usr/lib/habanalabs/libComplexGuid.so && \
     rm /usr/lib/habanalabs/libTPCFuser.so && \
@@ -25,7 +30,8 @@ RUN rm /usr/lib/habanalabs/libtpc_kernels.so && \
 
 ################################################################################
 # Build rhlml binary
-FROM rust:1.90.0-bookworm AS rhlml
+# rename Rust_builder to smth else
+FROM rust AS rust_builder
 RUN rustup component add rustfmt clippy
 
 COPY --from=base_image /usr/lib/habanalabs /usr/lib/habanalabs
@@ -43,7 +49,7 @@ RUN cargo build --release --bin rhlml && cp target/release/rhlml /bin/rhlml
 
 ################################################################################
 # Build metric-exporter
-FROM golang:1.25.5 AS exporter_builder
+FROM golang AS golang_builder
 RUN apt-get update -y && apt-get install -y --no-install-recommends git
 
 COPY --from=base_image /usr/lib/habanalabs /usr/lib/habanalabs
@@ -70,15 +76,19 @@ RUN ./checksec --file=/bin/metric-exporter --output=csv | grep -q "${CHECKSEC_RE
 
 ################################################################################
 # Build release image
-FROM ubuntu:24.04
+FROM ubuntu AS production
 ARG VERSION=""
 ARG BUILD_DATE=""
+
+RUN apt update \
+    && apt full-upgrade -y \
+	&& rm -rf /var/lib/apt/lists/*
 
 COPY habana-metric-exporter /usr/local/go/src/metric-exporter
 COPY --from=base_image /usr/lib/habanalabs /usr/lib/habanalabs
 COPY --from=base_image /usr/include/habanalabs /usr/include/habanalabs
-COPY --from=rhlml /bin/rhlml /usr/bin/rhlml
-COPY --from=exporter_builder /bin/metric-exporter /bin/metric-exporter
+COPY --from=rust_builder /bin/rhlml /usr/bin/rhlml
+COPY --from=golang_builder /bin/metric-exporter /bin/metric-exporter
 RUN echo "/usr/lib/habanalabs/" >> /etc/ld.so.conf.d/habanalabs.conf
 RUN ldconfig
 
@@ -86,7 +96,7 @@ USER 65534
 ENTRYPOINT  ["/bin/metric-exporter"]
 
 LABEL org.opencontainers.image.vendor="Intel Corp."
-LABEL org.opencontainers.image.title="Habana Gaudi Metric Exporter"
+LABEL org.opencontainers.image.title="Gaudi Metric Exporter"
 LABEL org.opencontainers.image.description="Prometheus exporter for Habana Gaudi metrics. This container image is intended for demo purposes only and not intended for production use. To receive expanded security maintenance from Canonical on the Ubuntu base layer, you may follow the [how-to](https://documentation.ubuntu.com/pro-client/en/docs/howtoguides/enable_in_dockerfile/) guide to enable Ubuntu Pro in a Dockerfile which will require the image to be rebuilt."
 LABEL org.opencontainers.image.version="${VERSION}"
 LABEL org.opencontainers.image.created="${BUILD_DATE}"

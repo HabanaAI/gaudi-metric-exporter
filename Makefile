@@ -1,3 +1,21 @@
+#!/usr/bin/env bash
+
+# Copyright (C) 2025 Intel Corporation
+
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License version 2 or later, as published
+# by the Free Software Foundation.
+
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, see <http://www.gnu.org/licenses/>.
+
+# SPDX-License-Identifier: GPL-2.0-or-later
+
 ifeq ($(VERBOSE),)
 	VERBOSE = FALSE
 endif
@@ -14,7 +32,8 @@ endif
 DOCKER_IMAGE ?= artifactory-kfs.habana-labs.com/$(DOCKER_REPO)/$(RELEASE_VERSION)/habanalabs/metric-exporter
 DOCKER_TAG ?= $(RELEASE_VERSION)-$(RELEASE_BUILD_ID)
 DOCKER_BASE_IMAGE ?= artifactory-kfs.habana-labs.com/docker-local/$(RELEASE_VERSION)/ubuntu22.04/habanalabs/external/base-installer:$(RELEASE_VERSION)-$(RELEASE_BUILD_ID)
-SRC_DIR := $(CURDIR)/../..
+SRC_DIR := $(CURDIR)
+UPDATE_TYPE ?= "patch"
 
 .PHONY: help validate init build test build/bin
 
@@ -71,3 +90,37 @@ test: validate ## test the metric exporter image
 	docker rm -f metric-exporter-test
 	@echo validate the metrics
 	grep 'habanalabs_memory_total_bytes{' metrics.log
+
+# upgrade
+.PHONY: update
+update:
+	@if [ "$(UPDATE_TYPE)" = "patch" ]; then \
+		GO_MINOR=$$(awk '/^go / {split($$2, v, "."); print v[1] "." v[2]; exit}' go.mod) && \
+		go get go@$$GO_MINOR && \
+		go get toolchain@go$$GO_MINOR; \
+	else \
+		go get go@latest && \
+		go get toolchain@latest; \
+	fi
+	go get -u ./... && \
+	GO_VERSION=$$(awk '/^go / {print $$2; exit}' go.mod) && \
+		sed -i "s/FROM golang:.* AS golang/FROM golang:$$GO_VERSION AS golang/g" build/docker/Dockerfile
+	cd rhlml && cargo update
+	cd rhlml/hlml-sys && cargo update
+	cd rhlml/hlml && cargo update
+
+.PHONY: tidy
+tidy: ## Run go mod tidy.
+	go mod tidy
+
+.PHONY: fmt
+fmt: ## Run go fmt against code.
+	go fmt ./...
+
+.PHONY: vet
+vet: ## Run go vet against code.
+	go vet ./...
+
+## Remember to 'export GOTOOLCHAIN=auto' before running this target to use the latest Go toolchain.
+.PHONY: upgrade
+upgrade: update tidy fmt vet
